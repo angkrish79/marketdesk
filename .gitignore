@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime symbol-master cache (rebuilt automatically)
+backend/cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local tooling
+.claude/
+
+# Pre-existing data files in this folder (not part of the app)
+SLB_Transaction_Data_*.csv

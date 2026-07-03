@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarketDesk — NSE + BSE Live Tracker</title>
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --panel: #101830;
+    --panel-2: #16203d;
+    --border: #24304f;
+    --text: #e8ecf5;
+    --muted: #8b96b3;
+    --gold: #d4af37;
+    --green: #26c281;
+    --red: #f0554e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+  a { color: inherit; }
+
+  /* ---------- Top bar ---------- */
+  header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-size: 20px; font-weight: 700; color: var(--gold); white-space: nowrap; }
+  .logo span { color: var(--text); font-weight: 400; }
+
+  .search-wrap { position: relative; flex: 1; max-width: 520px; }
+  #search {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; outline: none;
+  }
+  #search:focus { border-color: var(--gold); }
+  #suggestions {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 8px;
+    max-height: 380px; overflow-y: auto;
+    display: none; z-index: 200;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .sugg {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .sugg:last-child { border-bottom: none; }
+  .sugg:hover, .sugg.active { background: rgba(212,175,55,.08); }
+  .sugg .sym { font-weight: 600; min-width: 90px; }
+  .sugg .nm { color: var(--muted); font-size: 13px; flex: 1;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge {
+    font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;
+    letter-spacing: .5px;
+  }
+  .badge.nse { background: rgba(38,194,129,.15); color: var(--green); }
+  .badge.bse { background: rgba(212,175,55,.15); color: var(--gold); }
+  .sugg .add-btn {
+    background: none; border: 1px solid var(--border); color: var(--gold);
+    border-radius: 6px; padding: 3px 9px; cursor: pointer; font-size: 13px;
+  }
+  .sugg .add-btn:hover { border-color: var(--gold); }
+  .sugg-empty { padding: 12px; color: var(--muted); font-size: 14px; }
+
+  /* ---------- Layout ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+    padding: 16px 20px;
+    max-width: 1600px; margin: 0 auto;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  /* ---------- Stock header ---------- */
+  #stock-header { padding: 16px 20px; margin-bottom: 16px; }
+  #stock-header .top-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  #stock-header h2 { font-size: 20px; }
+  #stock-header .price { font-size: 24px; font-weight: 700; }
+  #stock-header .stats {
+    display: flex; gap: 24px; margin-top: 10px; flex-wrap: wrap;
+    color: var(--muted); font-size: 13px;
+  }
+  #stock-header .stats b { color: var(--text); font-weight: 600; display: block; font-size: 14px; }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  .muted { color: var(--muted); }
+
+  /* ---------- Chart ---------- */
+  #chart-panel { height: 480px; margin-bottom: 16px; overflow: hidden; }
+  #tv_chart { height: 100%; }
+  .placeholder {
+    height: 100%; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 15px; text-align: center; padding: 20px;
+  }
+
+  /* ---------- Watchlist ---------- */
+  #watchlist-panel { padding: 16px 20px; }
+  #watchlist-panel h3, #news-panel h3 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--gold); margin-bottom: 12px;
+  }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; white-space: nowrap; }
+  th, td { padding: 9px 10px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .5px; border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid rgba(36,48,79,.5); cursor: pointer; }
+  tbody tr:hover { background: rgba(212,175,55,.05); }
+  td .nm { display: block; color: var(--muted); font-size: 11px; max-width: 180px;
+           overflow: hidden; text-overflow: ellipsis; }
+  .rm-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 15px; padding: 2px 6px;
+  }
+  .rm-btn:hover { color: var(--red); }
+  .empty-note { color: var(--muted); font-size: 14px; padding: 14px 0; }
+
+  /* ---------- News ---------- */
+  #news-panel { padding: 16px; height: fit-content; position: sticky; top: 76px;
+                max-height: calc(100vh - 96px); overflow-y: auto; }
+  .news-item { padding: 11px 0; border-bottom: 1px solid rgba(36,48,79,.5); }
+  .news-item:last-child { border-bottom: none; }
+  .news-item a { text-decoration: none; font-size: 14px; line-height: 1.4; display: block; }
+  .news-item a:hover { color: var(--gold); }
+  .news-meta { margin-top: 5px; font-size: 12px; color: var(--muted); }
+  .news-meta .src { color: var(--gold); }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 1000px) {
+    .layout { grid-template-columns: 1fr; padding: 12px; }
+    #news-panel { position: static; max-height: none; }
+    #chart-panel { height: 380px; }
+    header { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
+    .search-wrap { max-width: none; min-width: 220px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Market<span>Desk</span></div>
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="Search NSE / BSE stocks (symbol or company name)…"
+           autocomplete="off" spellcheck="false">
+    <div id="suggestions"></div>
+  </div>
+</header>
+
+<div class="layout">
+  <main>
+    <div id="stock-header" class="panel">
+      <div class="top-row"><h2 class="muted">Select a stock to begin</h2></div>
+      <div class="stats muted">Search above or click a watchlist row to load its chart, live stats and news.</div>
+    </div>
+
+    <div id="chart-panel" class="panel">
+      <div id="tv_chart"><div class="placeholder">📈 The live TradingView chart will appear here</div></div>
+    </div>
+
+    <div id="watchlist-panel" class="panel">
+      <h3>Watchlist</h3>
+      <div class="table-wrap">
+        <table id="watchlist-table" style="display:none">
+          <thead>
+            <tr>
+              <th>Stock</th><th>LTP</th><th>Day %</th>
+              <th>vs 52W High</th><th>vs 52W Low</th>
+              <th>1M %</th><th>3M %</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="watchlist-body"></tbody>
+        </table>
+      </div>
+      <div id="watchlist-empty" class="empty-note">
+        Your watchlist is empty — search for a stock above and hit “+ Add”.
+      </div>
+    </div>
+  </main>
+
+  <aside id="news-panel" class="panel">
+    <h3 id="news-title">Market News</h3>
+    <div id="news-body"><div class="empty-note">Loading news…</div></div>
+  </aside>
+</div>
+
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+// ============================================================
+// Point this at your Railway backend URL after deploying, e.g.
+// const API_BASE = "https://your-app.up.railway.app";
+// ============================================================
+const API_BASE = "http://127.0.0.1:5000";
+
+const WATCHLIST_KEY = "marketdesk_watchlist";
+const state = {
+  watchlist: JSON.parse(localStorage.getItem(WATCHLIST_KEY) || "[]"),
+  selected: null,        // {symbol, name, exchange}
+  newsTimer: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function apiGet(path) {
+  const resp = await fetch(API_BASE + path);
+  if (!resp.ok) {
+    let msg = "Request failed (" + resp.status + ")";
+    try { msg = (await resp.json()).error || msg; } catch (_) {}
+    throw new Error(msg);
+  }
+  return resp.json();
+}
+
+const fmtPct = (v, signed = true) => {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const sign = signed && v > 0 ? "+" : "";
+  return sign + v.toFixed(2) + "%";
+};
+const pctClass = (v) => (v === null || v === undefined) ? "muted" : (v >= 0 ? "up" : "down");
+const fmtPrice = (v) => (v === null || v === undefined) ? "—"
+  : "₹" + Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const badge = (ex) => `<span class="badge ${ex === "NSE" ? "nse" : "bse"}">${ex}</span>`;
+
+// ---------------- Search with autocomplete ----------------
+const searchInput = $("search");
+const suggBox = $("suggestions");
+let debounceTimer = null;
+let activeIdx = -1;
+
+searchInput.addEventListener("input", () => {
+  clearTimeout(debounceTimer);
+  const q = searchInput.value.trim();
+  if (!q) { hideSuggestions(); return; }
+  debounceTimer = setTimeout(() => runSearch(q), 250);
+});
+searchInput.addEventListener("keydown", (e) => {
+  const items = suggBox.querySelectorAll(".sugg");
+  if (!items.length) return;
+  if (e.key === "ArrowDown") { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); }
+  else if (e.key === "Enter") { e.preventDefault(); items[Math.max(activeIdx, 0)]?.click(); return; }
+  else if (e.key === "Escape") { hideSuggestions(); return; }
+  else return;
+  items.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-wrap")) hideSuggestions();
+});
+
+function hideSuggestions() { suggBox.style.display = "none"; suggBox.innerHTML = ""; activeIdx = -1; }
+
+async function runSearch(q) {
+  try {
+    const data = await apiGet("/api/search?q=" + encodeURIComponent(q));
+    if (searchInput.value.trim() !== q) return; // stale response
+    renderSuggestions(data.results, data.loading);
+  } catch (err) {
+    suggBox.innerHTML = `<div class="sugg-empty">Search failed: ${esc(err.message)}</div>`;
+    suggBox.style.display = "block";
+  }
+}
+
+function renderSuggestions(results, loading) {
+  activeIdx = -1;
+  if (!results.length) {
+    suggBox.innerHTML = `<div class="sugg-empty">${loading ? "Symbol list is still loading, try again in a moment…" : "No matches found."}</div>`;
+    suggBox.style.display = "block";
+    return;
+  }
+  suggBox.innerHTML = results.map((r) => `
+    <div class="sugg" data-symbol="${esc(r.symbol)}" data-name="${esc(r.name)}" data-exchange="${esc(r.exchange)}">
+      <span class="sym">${esc(r.symbol)}</span>
+      ${badge(r.exchange)}
+      <span class="nm">${esc(r.name)}</span>
+      <button class="add-btn" title="Add to watchlist">+ Add</button>
+    </div>`).join("");
+  suggBox.style.display = "block";
+
+  suggBox.querySelectorAll(".sugg").forEach((el) => {
+    const stock = { symbol: el.dataset.symbol, name: el.dataset.name, exchange: el.dataset.exchange };
+    el.addEventListener("click", (e) => {
+      if (e.target.classList.contains("add-btn")) { addToWatchlist(stock); return; }
+      hideSuggestions();
+      searchInput.value = "";
+      selectStock(stock);
+    });
+  });
+}
+
+// ---------------- Watchlist ----------------
+function saveWatchlist() { localStorage.setItem(WATCHLIST_KEY, JSON.stringify(state.watchlist)); }
+
+function addToWatchlist(stock) {
+  if (state.watchlist.some((s) => s.symbol === stock.symbol)) return;
+  state.watchlist.push(stock);
+  saveWatchlist();
+  renderWatchlistSkeleton();
+  refreshWatchlist();
+}
+
+function removeFromWatchlist(symbol) {
+  state.watchlist = state.watchlist.filter((s) => s.symbol !== symbol);
+  saveWatchlist();
+  renderWatchlistSkeleton();
+  refreshWatchlist();
+}
+
+function renderWatchlistSkeleton() {
+  const has = state.watchlist.length > 0;
+  $("watchlist-table").style.display = has ? "" : "none";
+  $("watchlist-empty").style.display = has ? "none" : "";
+  if (!has) { $("watchlist-body").innerHTML = ""; return; }
+  // placeholder rows so newly added stocks appear immediately
+  const body = $("watchlist-body");
+  const existing = new Set([...body.querySelectorAll("tr")].map((tr) => tr.dataset.symbol));
+  state.watchlist.forEach((s) => {
+    if (existing.has(s.symbol)) return;
+    const tr = document.createElement("tr");
+    tr.dataset.symbol = s.symbol;
+    tr.innerHTML = rowHTML(s, null);
+    body.appendChild(tr);
+    wireRow(tr, s);
+  });
+  [...body.querySelectorAll("tr")].forEach((tr) => {
+    if (!state.watchlist.some((s) => s.symbol === tr.dataset.symbol)) tr.remove();
+  });
+}
+
+function rowHTML(stock, q) {
+  if (q && q.error) {
+    return `<td><b>${esc(stock.symbol)}</b> ${badge(stock.exchange)}<span class="nm">${esc(stock.name)}</span></td>
+      <td colspan="6" class="muted" style="text-align:left">${esc(q.error)}</td>
+      <td><button class="rm-btn" title="Remove">✕</button></td>`;
+  }
+  const cell = (v) => `<td class="${pctClass(v)}">${fmtPct(v)}</td>`;
+  return `<td><b>${esc(stock.symbol)}</b> ${badge(stock.exchange)}<span class="nm">${esc(stock.name)}</span></td>
+    <td>${q ? fmtPrice(q.ltp) : "…"}</td>
+    ${q ? cell(q.day_change_pct) : "<td>…</td>"}
+    ${q ? cell(q.pct_from_high) : "<td>…</td>"}
+    ${q ? cell(q.pct_from_low) : "<td>…</td>"}
+    ${q ? cell(q.change_1m_pct) : "<td>…</td>"}
+    ${q ? cell(q.change_3m_pct) : "<td>…</td>"}
+    <td><button class="rm-btn" title="Remove">✕</button></td>`;
+}
+
+function wireRow(tr, stock) {
+  tr.addEventListener("click", (e) => {
+    if (e.target.classList.contains("rm-btn")) { removeFromWatchlist(stock.symbol); return; }
+    selectStock(stock);
+  });
+}
+
+async function refreshWatchlist() {
+  if (!state.watchlist.length) return;
+  const symbols = state.watchlist.map((s) => s.symbol).join(",");
+  try {
+    const data = await apiGet("/api/quotes?symbols=" + encodeURIComponent(symbols));
+    const bySymbol = Object.fromEntries(data.quotes.map((q) => [q.symbol, q]));
+    state.watchlist.forEach((s) => {
+      const tr = $("watchlist-body").querySelector(`tr[data-symbol="${CSS.escape(s.symbol)}"]`);
+      if (!tr) return;
+      tr.innerHTML = rowHTML(s, bySymbol[s.symbol] || { error: "No data" });
+      wireRow(tr, s);
+    });
+  } catch (err) {
+    console.warn("Watchlist refresh failed:", err.message);
+  }
+}
+
+// ---------------- Stock selection: header + chart + news ----------------
+function selectStock(stock) {
+  state.selected = stock;
+  renderStockHeader(stock, null);
+  loadChart(stock);
+  loadNews();
+  apiGet("/api/quote/" + encodeURIComponent(stock.symbol))
+    .then((q) => { if (state.selected?.symbol === stock.symbol) renderStockHeader(stock, q); })
+    .catch((err) => { if (state.selected?.symbol === stock.symbol) renderStockHeader(stock, { error: err.message }); });
+}
+
+function renderStockHeader(stock, q) {
+  const h = $("stock-header");
+  if (!q) {
+    h.innerHTML = `<div class="top-row"><h2>${esc(stock.name)}</h2>${badge(stock.exchange)}
+      <span class="muted">loading quote…</span></div><div class="stats"></div>`;
+    return;
+  }
+  if (q.error) {
+    h.innerHTML = `<div class="top-row"><h2>${esc(stock.name)}</h2>${badge(stock.exchange)}</div>
+      <div class="stats"><span class="down">⚠ ${esc(q.error)}</span></div>`;
+    return;
+  }
+  h.innerHTML = `
+    <div class="top-row">
+      <h2>${esc(q.name)}</h2>${badge(q.exchange)}
+      <span class="price">${fmtPrice(q.ltp)}</span>
+      <span class="${pctClass(q.day_change_pct)}" style="font-size:17px;font-weight:600">${fmtPct(q.day_change_pct)}</span>
+    </div>
+    <div class="stats">
+      <span>52W High<b>${fmtPrice(q.high_52w)} <span class="${pctClass(q.pct_from_high)}">(${fmtPct(q.pct_from_high)})</span></b></span>
+      <span>52W Low<b>${fmtPrice(q.low_52w)} <span class="${pctClass(q.pct_from_low)}">(${fmtPct(q.pct_from_low)})</span></b></span>
+      <span>1 Month<b class="${pctClass(q.change_1m_pct)}">${fmtPct(q.change_1m_pct)}</b></span>
+      <span>3 Months<b class="${pctClass(q.change_3m_pct)}">${fmtPct(q.change_3m_pct)}</b></span>
+    </div>`;
+}
+
+function loadChart(stock) {
+  $("tv_chart").innerHTML = "";
+  try {
+    new TradingView.widget({
+      container_id: "tv_chart",
+      autosize: true,
+      symbol: `${stock.exchange}:${stock.symbol}`,
+      interval: "D",
+      timezone: "Asia/Kolkata",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      withdateranges: true,          // 1D / 1M / 3M / 1Y … range buttons
+      allow_symbol_change: false,
+      hide_side_toolbar: false,
+      backgroundColor: "#101830",
+    });
+  } catch (err) {
+    $("tv_chart").innerHTML = `<div class="placeholder">Chart failed to load: ${esc(err.message)}</div>`;
+  }
+}
+
+// ---------------- News ----------------
+function relTime(iso) {
+  if (!iso) return "";
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+  if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+  return Math.floor(diff / 86400) + "d ago";
+}
+
+async function loadNews() {
+  const path = state.selected
+    ? "/api/news/" + encodeURIComponent(state.selected.symbol)
+    : "/api/news";
+  $("news-title").textContent = state.selected ? `News · ${state.selected.symbol}` : "Market News";
+  try {
+    const data = await apiGet(path);
+    const items = data.items || [];
+    if (!items.length) {
+      $("news-body").innerHTML = `<div class="empty-note">No recent news found${state.selected ? " for " + esc(state.selected.symbol) : ""}.</div>`;
+      return;
+    }
+    $("news-body").innerHTML = items.map((n) => `
+      <div class="news-item">
+        <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.title)}</a>
+        <div class="news-meta"><span class="src">${esc(n.source || "News")}</span> · ${relTime(n.published)}</div>
+      </div>`).join("");
+  } catch (err) {
+    $("news-body").innerHTML = `<div class="empty-note">Couldn’t load news: ${esc(err.message)}</div>`;
+  }
+}
+
+// ---------------- Boot ----------------
+renderWatchlistSkeleton();
+refreshWatchlist();
+loadNews();
+setInterval(refreshWatchlist, 15_000);
+setInterval(loadNews, 60_000);
+</script>
+</body>
+</html>
